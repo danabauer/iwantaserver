@@ -55,58 +55,49 @@ class Server(db.Model):
         self.password = password
         self.event_id = event_id
 
+@app.route("/", methods=["GET"])
+def show_index():
+    return render_template("index.html")
 
-@app.route("/event", methods=["GET", "POST"])
-def show_event():
-    event_name = request.args.get("event", None)
-    event = Event.query.filter(Event.name.is_(event_name)).scalar()
+@app.route("/server", methods=["POST"])
+def show_server():
+
+    event_name = request.form["event"]
+    email_addr = request.form["email"]
     error = ""
 
+    # Check that event exists
+    event = Event.query.filter(Event.name.is_(event_name)).scalar()
     if not event:
         return render_template("oops.html",
             error="Sorry, I've never heard of %s" % event_name)
 
-    # If we're coming in from a post, claim that server and mark it as
-    # no longer available. Then spin up a new one.
-    if request.method == "POST":
-        server = Server.query.filter(
-            Server.event_id.is_(event.id)).filter(
-            Server.ip.is_(request.form["ip"])).filter(
-            Server.available.is_(True)).scalar()
-        if server is None:
-            error = "Oops, someone claimed this one. Here, have another."
-        else:
-            server.available = False
-            server.email = request.form["email"]
-            db.session.add(server)
-            db.session.commit()
-
-            Popen(["givemeaserver.py",
-                   "--image", event.image_id,
-                   "--size", event.size_id, "--num", "1",
-                   "--event", str(event.id)])
-
+    # Claim a random available server for this user (email)
     servers = Server.query.filter(
         Server.event_id.is_(event.id)).filter(
         Server.available.is_(True)).all()
+
     if not servers:
         error = ("There are no servers available right now. "
-                 "Go check with the Rackspace table and they'll help you out.")
+                     "Go check with the Rackspace table and they'll help you out.")
         return render_template("oops.html", error=error)
+
     server = random.choice(servers)
+    server.available = False
+    server.email = email_addr
+    db.session.add(server)
+    db.session.commit()
+
+    # Spin up a new server
+    Popen(["givemeaserver.py",
+           "--image", event.image_id,
+           "--size", event.size_id, "--num", "1",
+           "--event", str(event.id)])
+
+    # Show server details
     return render_template("event.html", error=error, name=event.name,
                            image=event.image_name, size=event.size_name,
                            ip=server.ip, password=server.password)
-
-
-@app.route("/", methods=["GET", "POST"])
-def get_event():
-    if request.method == "POST":
-        event = request.form["event"]
-        return redirect(url_for("show_event", event=event))
-    else:
-        return render_template("index.html")
-
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "init":

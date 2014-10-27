@@ -95,7 +95,7 @@ def show_server():
            "--event", str(event.id)])
 
     # Show server details
-    return render_template("event.html", error=error, name=event.name,
+    return render_template("server.html", error=error, name=event.name,
                            image=event.image_name, size=event.size_name,
                            ip=server.ip, password=server.password)
 
